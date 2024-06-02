@@ -34,6 +34,42 @@ volatile int run = 1;
 
 client_t self;
 
+pthread_t sender_thread, receiver_thread;
+
+message_t msg_received, msg_to_send;
+
+void *sender_thread_fun(void *arg) {
+
+    while (run) {
+        int len = 0;
+        char c = fgetc(stdin);
+        while (run && len < MAX_MSG_LENGTH - 1 && c != '\n') {
+            msg_to_send.msg[len] = c;
+            c = fgetc(stdin);
+            len++;
+        }
+        printf("\n!! --- Message sent! --- !!\n\n");
+        if (!run) break;
+        strncpy(msg_to_send.type, "ALL", MAX_MSG_TYPE_LENGTH);
+        send(self.sockfd, &msg_to_send, sizeof(msg_to_send), 0);
+        memset(msg_to_send.msg, 0, MAX_MSG_LENGTH);
+        memset(msg_to_send.type, 0, MAX_MSG_TYPE_LENGTH);
+    }
+
+    return NULL;
+}
+
+void *receiver_thread_fun(void *arg) {
+    client_t *cli = (client_t *) arg;
+    while (run) {
+        recv(self.sockfd, msg_received.msg, MAX_MSG_LENGTH - 1, 0);
+        printf("%s\n", msg_received.msg);
+        memset(msg_received.msg, 0, MAX_MSG_LENGTH);
+    }
+
+    return NULL;
+}
+
 void handle(int signum) {
     run = 0;
     close(self.sockfd);
@@ -72,20 +108,19 @@ int main(int argc, char **argv) {
 
     signal(SIGINT, handle);
 
-    message_t msg_to_send;
-    msg_to_send.sockfd = socket_fd;
-
-    message_t msg_received;
-    msg_received.sockfd = socket_fd;
-
     memset(msg_received.msg, 0, MAX_MSG_LENGTH);
-
-    while (run) {
-        recv(socket_fd, msg_received.msg, MAX_MSG_LENGTH - 1, 0);
-        if (strlen(msg_received.msg) > 0) {
-            printf("%s\n", msg_received.msg);
-        }
+    recv(socket_fd, msg_received.msg, MAX_MSG_LENGTH - 1, 0);
+    if (strlen(msg_received.msg) > 0 && run) {
+        printf("%s\n", msg_received.msg);
+        memset(msg_received.msg, 0, MAX_MSG_LENGTH);
     }
+
+    printf("In order to chat type one of the following commands, and arguments if needed.\nLIST - (no args) list all active users\nALL - (arg: message) send your message to everyone\nONE - (args: sockfd, message) send your message to user with \"sockfd\" socket descriptor\nSTOP (or Ctrl+C) - quit the chat\n");
+
+    pthread_create(&receiver_thread, NULL, receiver_thread_fun, &self);
+    pthread_create(&sender_thread, NULL, sender_thread_fun, NULL);
+
+    while (run) {}
 
     close(socket_fd);
 

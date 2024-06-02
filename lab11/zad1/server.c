@@ -28,6 +28,7 @@ socklen_t addr_size = sizeof(struct sockaddr_in);
 int free_socket = 0;
 
 client_t clients[MAX_BACKLOG];
+message_t client_messages[MAX_BACKLOG];
 
 int client_count = 0;
 
@@ -76,6 +77,39 @@ void *acceptor_thread_fun(void *arg) {
     return NULL;
 }
 
+void *receiver_thread_fun(void *arg) {
+    client_t *cli = (client_t *) arg;
+    while (run) {
+        if (cli->sockfd == -1) continue;
+        recv(cli->sockfd, &client_messages[cli->client_id], MAX_MSG_LENGTH, 0);
+        printf("\n!! --- Message received! --- !!\n%d\n", cli->client_id);
+        if (strcmp(client_messages[cli->client_id].type, "LIST") == 0) {
+            for (int i = 0; i < MAX_BACKLOG; i++) {
+                if (&clients[i] == cli || clients[i].client_id == -1) {
+                    continue;
+                }
+                send(cli->sockfd, clients[i].name, MAX_CLIENT_NAME_SIZE - 1, 0);
+            }
+        } else if (strcmp(client_messages[cli->client_id].type, "ALL") == 0) {
+            for (int i = 0; i < MAX_BACKLOG; i++) {
+                if (&clients[i] == cli || clients[i].client_id == -1) {
+                    continue;
+                }
+                send(clients[i].sockfd, client_messages[cli->client_id].msg, MAX_MSG_LENGTH - 1, 0);
+            }
+        } else if (strcmp(client_messages[cli->client_id].type, "ONE") == 0) {
+            send(client_messages[cli->client_id].dest, client_messages[cli->client_id].msg, MAX_MSG_LENGTH - 1, 0);
+        } else if (strcmp(client_messages[cli->client_id].type, "STOP") == 0) {
+            cli->client_id = -1;
+            cli->sockfd = -1;
+            memset(cli->name, 0, MAX_CLIENT_NAME_SIZE);
+            cli->addr = NULL;
+        }
+    }
+
+    return NULL;
+}
+
 int main(int argc, char **argv) {
 
     if (argc != 2) {
@@ -95,19 +129,16 @@ int main(int argc, char **argv) {
     // struct sockaddr_in client_addrs[MAX_BACKLOG];
     socklen_t client_addr_sizes[MAX_BACKLOG];
 
-    message_t client_messages[MAX_BACKLOG];
-
     server_t serv;
     serv.sockfd = server_sockfd;
     serv.addr = &sa_addr;
 
-    pthread_create(&acceptor_thread, NULL, acceptor_thread_fun, (void *) &serv);
-
     for (short i = 0; i < MAX_BACKLOG; i++) {
-        client_sockfd[i] = -1;
-        client_addr_sizes[i] = addr_size;
+        clients[i].client_id = -1;
+        clients[i].sockfd = -1;
+        memset(clients[i].name, 0, MAX_CLIENT_NAME_SIZE);
+        clients[i].addr = NULL;
 
-        client_messages[i].sockfd = server_sockfd;
         memset(client_messages[i].msg, 0, MAX_MSG_LENGTH);
     }
 
@@ -126,33 +157,14 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    pthread_create(&acceptor_thread, NULL, acceptor_thread_fun, &serv);
+    for (int i = 0; i < MAX_BACKLOG; i++) {
+        pthread_create(&receiver_threads[i], NULL, receiver_thread_fun, &clients[i]);
+    }
+
     // Ctrl+C
     signal(SIGINT, handle);
     
-    // while (run) {
-    //     int new_socket = accept(server_sockfd, (struct sockaddr *) &sa_addr, client_addr_sizes + free_addr);
-    //     if (!run) break;
-    //     if (new_socket >= 0) {
-    //         printf("ACCEPTED\n");
-    //         recv(new_socket, welcome, MAX_CLIENT_NAME_SIZE - 1, 0);
-    //         sprintf(welcome + strlen(welcome), " has entered the chat!");
-    //         client_sockfd[free_addr] = new_socket;
-    //         for (size_t i = 0; i < MAX_BACKLOG; i++) {
-    //             send(client_sockfd[i], welcome, sizeof(welcome), 0);
-    //         }
-    //         free_addr++;
-    //         free_addr %= MAX_BACKLOG;
-    //     }
-    //     for (size_t i = 0; i < MAX_BACKLOG; i++) {
-    //         ssize_t recvlen = recv(client_sockfd[i], client_messages[i].msg, MAX_MSG_LENGTH - 1, 0);
-    //         if (strlen(client_messages[i].msg) > 0) {
-    //             printf("Client %d: %s\n", client_sockfd[i], client_messages[i].msg);
-    //         }
-    //         if (recvlen < 0) {
-    //             printf("Error\n");
-    //         }
-    //     }
-    // }
     while (run) {}
 
     for (size_t i = 0; i < MAX_BACKLOG; i++) {

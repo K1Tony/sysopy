@@ -6,14 +6,17 @@
 
 #define MAX_MSG_LENGTH 1024
 
+#define MAX_MSG_TYPE_LENGTH 5
+
 #include "sys/socket.h"
 #include "sys/types.h"
 #include "netinet/in.h"
 #include "arpa/inet.h"
 
 typedef struct message {
+    char type[MAX_MSG_TYPE_LENGTH];
+    int dest;
     char msg[MAX_MSG_LENGTH];
-    int sockfd;
 } message_t;
 
 typedef struct client {
