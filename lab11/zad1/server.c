@@ -42,6 +42,10 @@ void handle(int signum) {
     run = 0;
 }
 
+void *acceptor_thread_fun(void *arg) {
+    
+}
+
 int main(int argc, char **argv) {
 
     if (argc != 2) {
