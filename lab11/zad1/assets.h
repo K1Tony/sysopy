@@ -1,10 +1,10 @@
 #ifndef ASSETS_H
 #define ASSETS_H
 
-#define MAX_BACKLOG 2
+#define MAX_BACKLOG 5
 #define MAX_CLIENT_NAME_SIZE 256
 
-#define MAX_MSG_LENGTH 1024
+#define MAX_MSG_LENGTH 4096
 
 #define MAX_MSG_TYPE_LENGTH 5
 

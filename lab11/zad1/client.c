@@ -39,7 +39,7 @@ pthread_t sender_thread, receiver_thread;
 message_t msg_received, msg_to_send;
 
 void *sender_thread_fun(void *arg) {
-
+    arg = NULL;
     while (run) {
         int len = 0;
         char c = fgetc(stdin);
@@ -48,9 +48,25 @@ void *sender_thread_fun(void *arg) {
             c = fgetc(stdin);
             len++;
         }
-        printf("\n!! --- Message sent! --- !!\n\n");
+        size_t msg_start = 0;
+        if (strncmp(msg_to_send.msg, "LIST", 4) == 0) {
+            strncpy(msg_to_send.type, "LIST", MAX_MSG_TYPE_LENGTH);
+        } else if (strncmp(msg_to_send.msg, "ALL", 3) == 0) {
+            strncpy(msg_to_send.type, "ALL", MAX_MSG_TYPE_LENGTH);
+            msg_start = 4;
+        } else if (strncmp(msg_to_send.msg, "ONE", 3) == 0) {
+            strncpy(msg_to_send.type, "ONE", MAX_MSG_TYPE_LENGTH);
+            msg_start = 4;
+            msg_to_send.dest = atoi(msg_to_send.msg + msg_start);
+            while (msg_to_send.msg[msg_start] - '0' >= 0 && msg_to_send.msg[msg_start] - '0' <= 9) {
+                msg_start++;
+            }
+            msg_start++;
+        } else if (strncmp(msg_to_send.msg, "STOP", 4) == 0) {
+            strncpy(msg_to_send.type, "STOP", MAX_MSG_TYPE_LENGTH);
+        }
         if (!run) break;
-        strncpy(msg_to_send.type, "ALL", MAX_MSG_TYPE_LENGTH);
+        printf("\n!! --- Message sent! --- !!\n\n");
         send(self.sockfd, &msg_to_send, sizeof(msg_to_send), 0);
         memset(msg_to_send.msg, 0, MAX_MSG_LENGTH);
         memset(msg_to_send.type, 0, MAX_MSG_TYPE_LENGTH);
@@ -60,9 +76,13 @@ void *sender_thread_fun(void *arg) {
 }
 
 void *receiver_thread_fun(void *arg) {
-    client_t *cli = (client_t *) arg;
+    arg = NULL;
     while (run) {
         recv(self.sockfd, msg_received.msg, MAX_MSG_LENGTH - 1, 0);
+        if (strcmp(msg_received.msg, "TERMINATE") == 0) {
+            run = 0;
+            break;
+        }
         printf("%s\n", msg_received.msg);
         memset(msg_received.msg, 0, MAX_MSG_LENGTH);
     }
@@ -71,7 +91,8 @@ void *receiver_thread_fun(void *arg) {
 }
 
 void handle(int signum) {
-    run = 0;
+    signum = 0;
+    run = signum;
     close(self.sockfd);
 }
 

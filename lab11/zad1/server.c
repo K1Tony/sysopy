@@ -25,14 +25,14 @@ int client_sockfd[MAX_BACKLOG];
 
 socklen_t addr_size = sizeof(struct sockaddr_in);
 
-int free_socket = 0;
+int free_socket;
 
 client_t clients[MAX_BACKLOG];
 message_t client_messages[MAX_BACKLOG];
 
 int client_count = 0;
 
-char welcome[MAX_MSG_LENGTH] = {0};
+char welcome[MAX_MSG_LENGTH] = {0}, goodbye[MAX_MSG_LENGTH] = {0}, all_clients[(MAX_CLIENT_NAME_SIZE + 20) * MAX_BACKLOG];
 
 // threading
 pthread_t acceptor_thread;
@@ -44,7 +44,8 @@ void handle(int signum) {
         close(clients[i].sockfd);
     }
     close(server_sockfd);
-    run = 0;
+    signum = 0;
+    run = signum;
 }
 
 void *acceptor_thread_fun(void *arg) {
@@ -54,6 +55,12 @@ void *acceptor_thread_fun(void *arg) {
         if (client_count == MAX_BACKLOG) {
             send(new_socket, "Sorry, chat is full :<", MAX_MSG_LENGTH - 1, 0);
             continue;
+        }
+        for (int i = 0; i < MAX_BACKLOG; i++) {
+            if (clients[i].sockfd == -1) {
+                free_socket = i;
+                break;
+            }
         }
         client_count++;
         clients[free_socket].sockfd = new_socket;
@@ -70,9 +77,6 @@ void *acceptor_thread_fun(void *arg) {
                 send(clients[i].sockfd, welcome, MAX_MSG_LENGTH - 1, 0);
             }
         }
-
-        free_socket++;
-        free_socket %= MAX_BACKLOG;
     }
     return NULL;
 }
@@ -84,12 +88,16 @@ void *receiver_thread_fun(void *arg) {
         recv(cli->sockfd, &client_messages[cli->client_id], MAX_MSG_LENGTH, 0);
         printf("\n!! --- Message received! --- !!\n%d\n", cli->client_id);
         if (strcmp(client_messages[cli->client_id].type, "LIST") == 0) {
+            int msg_idx = 0;
             for (int i = 0; i < MAX_BACKLOG; i++) {
                 if (&clients[i] == cli || clients[i].client_id == -1) {
                     continue;
                 }
-                send(cli->sockfd, clients[i].name, MAX_CLIENT_NAME_SIZE - 1, 0);
+                sprintf(all_clients + msg_idx, "%s sockfd: %d\n", clients[i].name, clients[i].sockfd);
+                msg_idx = strlen(all_clients);
             }
+            send(cli->sockfd, all_clients, MAX_CLIENT_NAME_SIZE - 1, 0);
+            memset(all_clients, 0, MAX_MSG_LENGTH);
         } else if (strcmp(client_messages[cli->client_id].type, "ALL") == 0) {
             for (int i = 0; i < MAX_BACKLOG; i++) {
                 if (&clients[i] == cli || clients[i].client_id == -1) {
@@ -100,11 +108,18 @@ void *receiver_thread_fun(void *arg) {
         } else if (strcmp(client_messages[cli->client_id].type, "ONE") == 0) {
             send(client_messages[cli->client_id].dest, client_messages[cli->client_id].msg, MAX_MSG_LENGTH - 1, 0);
         } else if (strcmp(client_messages[cli->client_id].type, "STOP") == 0) {
+            send(cli->sockfd, "TERMINATE", MAX_MSG_LENGTH - 1, 0);
+            sprintf(goodbye, "%s has left the chat!", cli->name);
             cli->client_id = -1;
             cli->sockfd = -1;
             memset(cli->name, 0, MAX_CLIENT_NAME_SIZE);
             cli->addr = NULL;
-        }
+            client_count--;
+            for (int i = 0; i < MAX_BACKLOG; i++) {
+                send(clients[i].sockfd, goodbye, MAX_MSG_LENGTH - 1, 0);
+            }
+            memset(goodbye, 0, MAX_MSG_LENGTH);
+        } 
     }
 
     return NULL;
@@ -127,7 +142,6 @@ int main(int argc, char **argv) {
     server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     // struct sockaddr_in client_addrs[MAX_BACKLOG];
-    socklen_t client_addr_sizes[MAX_BACKLOG];
 
     server_t serv;
     serv.sockfd = server_sockfd;
