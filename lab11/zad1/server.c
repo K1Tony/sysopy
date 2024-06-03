@@ -60,7 +60,12 @@ void *acceptor_thread_fun(void *arg) {
     while (run) {
         int new_socket = accept(serv->sockfd, (struct sockaddr *) serv->addr, &addr_size);
         if (client_count == MAX_BACKLOG) {
-            send(new_socket, "Sorry, chat is full :<", MAX_MSG_LENGTH - 1, 0);
+            sprintf(goodbye_msg.type, "FULL");
+            send(new_socket, &goodbye_msg, sizeof(message_t), 0);
+            memset(goodbye_msg.type, 0, MAX_MSG_TYPE_LENGTH);
+
+            shutdown(new_socket, SHUT_RDWR);
+            close(new_socket);
             continue;
         }
         for (int i = 0; i < MAX_BACKLOG; i++) {
@@ -83,11 +88,9 @@ void *receiver_thread_fun(void *arg) {
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
     pthread_mutex_lock(&cli->mutex);
-    printf("Mutex unlocked!");
     while (run) {
         if (cli->sockfd == -1) continue;
         recv(cli->sockfd, &client_messages[cli->client_id], sizeof(message_t), 0);
-        printf("\n!! --- Message received! --- !!\n%d\n", client_messages[cli->client_id].dest);
         if (strcmp(client_messages[cli->client_id].type, "LIST") == 0) {
             int msg_idx = 0;
             for (int i = 0; i < MAX_BACKLOG; i++) {

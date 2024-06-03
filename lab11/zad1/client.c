@@ -23,6 +23,8 @@ volatile int run = 1;
 
 client_t self;
 
+int accepted = 1;
+
 pthread_t sender_thread, receiver_thread, welcome_thread;
 
 pthread_mutex_t receiver_init_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -85,9 +87,15 @@ void *receiver_thread_fun(void *arg) {
     pthread_setcancelstate(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
     while (run) {
-        pthread_cond_broadcast(&receiver_init_cond);
+        pthread_cond_signal(&receiver_init_cond);
         recv(self.sockfd, &msg_received, sizeof(message_t), 0);
         if (strcmp(msg_received.msg, "TERMINATE") == 0) {
+            raise(SIGINT);
+            break;
+        }
+        if (strcmp(msg_received.type, "FULL") == 0) {
+            accepted = 0;
+            printf("\n!! ------- !!\nSorry, the chat is currently full!\n!! ------- !!\n");
             raise(SIGINT);
             break;
         }
@@ -95,6 +103,8 @@ void *receiver_thread_fun(void *arg) {
         memset(msg_received.msg, 0, MAX_MSG_LENGTH);
         memset(msg_received.author, 0, MAX_CLIENT_NAME_SIZE);
         memset(msg_received.type, 0, MAX_MSG_TYPE_LENGTH);
+
+        pthread_cond_signal(&receiver_init_cond);
     }
 
     return arg;
@@ -112,14 +122,19 @@ void *welcome_thread_fun(void *arg) {
     memset(msg_to_send.type, 0, MAX_MSG_TYPE_LENGTH);
     memset(msg_to_send.msg, 0, MAX_MSG_LENGTH);
 
+    pthread_cond_wait(&receiver_init_cond, &receiver_init_mutex);
+    printf("\n\nIn order to chat type one of the following commands, and arguments if needed.\nLIST - (no args) list all active users\nALL - (arg: message) send your message to everyone\nONE - (args: sockfd, message) send your message to user with \"sockfd\" socket descriptor\nSTOP (or Ctrl+C) - quit the chat\n\n");
+
     return arg;
 }
 
 void handle(int signum) {
     signum = 0;
     run = signum;
-    strcpy(msg_to_send.type, "STOP");
-    send(self.sockfd, &msg_to_send, sizeof(msg_to_send), 0);
+    if (accepted) {
+        strcpy(msg_to_send.type, "STOP");
+        send(self.sockfd, &msg_to_send, sizeof(msg_to_send), 0);
+    }
     pthread_cancel(sender_thread);
     pthread_cancel(receiver_thread);
 
@@ -170,8 +185,6 @@ int main(int argc, char **argv) {
 
     memset(msg_received.msg, 0, MAX_MSG_LENGTH);
     pthread_mutex_unlock(&self.mutex);
-
-    printf("In order to chat type one of the following commands, and arguments if needed.\nLIST - (no args) list all active users\nALL - (arg: message) send your message to everyone\nONE - (args: sockfd, message) send your message to user with \"sockfd\" socket descriptor\nSTOP (or Ctrl+C) - quit the chat\n");
 
     pthread_join(sender_thread, NULL);
     pthread_join(receiver_thread, NULL);
