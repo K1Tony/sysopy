@@ -32,15 +32,17 @@ message_t client_messages[MAX_BACKLOG], welcome_msg, goodbye_msg, list_msg;
 
 int client_count = 0;
 
-char welcome[MAX_MSG_LENGTH] = {0}, goodbye[MAX_MSG_LENGTH] = {0}, all_clients[(MAX_CLIENT_NAME_SIZE + 20) * MAX_BACKLOG];
-
 // threading
 pthread_t acceptor_thread;
 pthread_t receiver_threads[MAX_BACKLOG];
 
 void handle(int signum) {
+    memset(goodbye_msg.msg, 0, MAX_MSG_LENGTH);
+    sprintf(goodbye_msg.msg, "TERMINATE");
     pthread_cancel(acceptor_thread);
     for (size_t i = 0; i < MAX_BACKLOG; i++) {
+        send(clients[i].sockfd, &goodbye_msg, sizeof(message_t), 0);
+
         pthread_mutex_destroy(&clients[i].mutex);
         pthread_cancel(receiver_threads[i]);
 
@@ -130,7 +132,6 @@ void *receiver_thread_fun(void *arg) {
                 }
                 send(clients[i].sockfd, &welcome_msg, sizeof(message_t), 0);
             }
-            memset(welcome, 0, MAX_MSG_LENGTH);
         }
     }
 
@@ -152,8 +153,6 @@ int main(int argc, char **argv) {
     sa_addr.sin_addr.s_addr = INADDR_ANY;
 
     server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-
-    // struct sockaddr_in client_addrs[MAX_BACKLOG];
 
     server_t serv;
     serv.sockfd = server_sockfd;

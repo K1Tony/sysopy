@@ -19,9 +19,6 @@
 // my include
 #include "assets.h"
 
-// pthread_mutex_t sender_mutex, receiver_mutex;
-
-
 volatile int run = 1;
 
 client_t self;
@@ -80,7 +77,7 @@ void *sender_thread_fun(void *arg) {
         memset(temp_msg, 0, sizeof(temp_msg) * sizeof(char));
     }
 
-    return NULL;
+    return arg;
 }
 
 void *receiver_thread_fun(void *arg) {
@@ -91,6 +88,7 @@ void *receiver_thread_fun(void *arg) {
         pthread_cond_broadcast(&receiver_init_cond);
         recv(self.sockfd, &msg_received, sizeof(message_t), 0);
         if (strcmp(msg_received.msg, "TERMINATE") == 0) {
+            raise(SIGINT);
             break;
         }
         printf("%s : %s\n", msg_received.author, msg_received.msg);
@@ -99,10 +97,11 @@ void *receiver_thread_fun(void *arg) {
         memset(msg_received.type, 0, MAX_MSG_TYPE_LENGTH);
     }
 
-    return NULL;
+    return arg;
 }
 
 void *welcome_thread_fun(void *arg) {
+    arg = NULL;
     pthread_cond_wait(&receiver_init_cond, &receiver_init_mutex);
 
     strncpy(msg_to_send.author, self.name, MAX_CLIENT_NAME_SIZE);
@@ -113,7 +112,7 @@ void *welcome_thread_fun(void *arg) {
     memset(msg_to_send.type, 0, MAX_MSG_TYPE_LENGTH);
     memset(msg_to_send.msg, 0, MAX_MSG_LENGTH);
 
-    return NULL;
+    return arg;
 }
 
 void handle(int signum) {
@@ -170,11 +169,6 @@ int main(int argc, char **argv) {
     pthread_create(&sender_thread, NULL, sender_thread_fun, NULL);
 
     memset(msg_received.msg, 0, MAX_MSG_LENGTH);
-    // recv(socket_fd, msg_received.msg, MAX_MSG_LENGTH - 1, 0);
-    // if (strlen(msg_received.msg) > 0 && run) {
-    //     printf("%s\n", msg_received.msg);
-    //     memset(msg_received.msg, 0, MAX_MSG_LENGTH);
-    // }
     pthread_mutex_unlock(&self.mutex);
 
     printf("In order to chat type one of the following commands, and arguments if needed.\nLIST - (no args) list all active users\nALL - (arg: message) send your message to everyone\nONE - (args: sockfd, message) send your message to user with \"sockfd\" socket descriptor\nSTOP (or Ctrl+C) - quit the chat\n");
