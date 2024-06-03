@@ -13,10 +13,14 @@
 #include "netinet/in.h"
 #include "arpa/inet.h"
 
+#include "pthread.h"
+
 typedef struct message {
     char type[MAX_MSG_TYPE_LENGTH];
-    int dest;
+    char author[MAX_CLIENT_NAME_SIZE];
     char msg[MAX_MSG_LENGTH];
+    int dest;
+    int src;
 } message_t;
 
 typedef struct client {
@@ -24,6 +28,7 @@ typedef struct client {
     int client_id;
     char name[MAX_CLIENT_NAME_SIZE];
     struct sockaddr_in *addr;
+    pthread_mutex_t mutex;
 } client_t;
 
 typedef struct server {
